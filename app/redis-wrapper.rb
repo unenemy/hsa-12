@@ -2,7 +2,7 @@ require 'redis-client'
 require './dlogger.rb'
 
 class Redis
-  attr_reader :connection, :beta
+  attr_reader :beta, :connection
 
   def initialize(beta = 1)
     @beta = beta
@@ -15,6 +15,10 @@ class Redis
       ],
       role: :master
     )
+    make_connection
+  end
+
+  def make_connection
     @connection = @sentinel_config.new_pool(timeout: 5, size: 5)
   end
 
@@ -34,15 +38,23 @@ class Redis
     end
   end
 
+  def call(...)
+    connection.call(...)
+  rescue RedisClient::Error => e
+    Dlogger.puts "Redis Timeout on host #{ENV["HOSTNAME"]}.. retrying"
+    make_connection
+    retry
+  end
+
   def pttl(key)
-    connection.call("PTTL", key)
+    call("PTTL", key)
   end
 
   def set(key, value, expiry)
-    connection.call("SET", key, value, "EX", expiry)
+    call("SET", key, value, "EX", expiry)
   end
 
   def get(key)
-    connection.call("GET", key)
+    call("GET", key)
   end
 end
